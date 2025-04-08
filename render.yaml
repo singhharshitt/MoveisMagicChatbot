@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: movie-chatbot
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn app:app
+    envVars:
+      - key: TMDB_API_KEY
+        value: 59f67967de2c68d1af65f60eb2c3d434
+    plan: free

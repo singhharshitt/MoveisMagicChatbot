@@ -21,7 +21,7 @@ GENRE_MAP = {
 
 def format_movie_list(movies):
     formatted = []
-    for movie in movies[:6]:
+    for movie in movies[:10]:
         formatted.append({
             "title": movie.get("title", "Unknown Title"),
             "year": movie.get("release_date", "N/A")[:4],
@@ -84,6 +84,25 @@ def get_top_movies():
     except Exception as e:
         return {"text": f"Error fetching top-rated movies: {str(e)}", "movies": []}
 
+def get_movies_by_movie_genre(movie_name):
+    try:
+        search_url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={movie_name}"
+        search_response = requests.get(search_url).json()
+
+        if search_response.get("results"):
+            genre_ids = search_response["results"][0].get("genre_ids", [])
+            if genre_ids:
+                genre_id = genre_ids[0]
+                discover_url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_genres={genre_id}&sort_by=popularity.desc"
+                response = requests.get(discover_url).json()
+                movies = format_movie_list(response.get("results", []))
+                if movies:
+                    text = "\n".join([f"🎬 {m['title']} ({m['year']}) ⭐ {m['rating']}" for m in movies])
+                    return {"text": text, "movies": movies}
+        return {"text": "Couldn't identify the genre or find similar movies.", "movies": []}
+    except Exception as e:
+        return {"text": f"Error analyzing movie genre: {str(e)}", "movies": []}
+
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -96,11 +115,9 @@ def chat():
     if not user_message:
         return jsonify({"response": "Please enter a movie name or genre!"})
 
-    # Greet the user
     if user_message in ["hi", "hello", "hey"]:
         return jsonify({"response": "Hi there! 👋 Which movie recommendation are you looking for?"})
 
-    # Show genre buttons
     if "genre" in user_message or "genera" in user_message:
         buttons_html = "<strong>🎬 Tap a genre to explore:</strong><br><br>"
         for genre in GENRE_MAP:
@@ -111,22 +128,35 @@ def chat():
             )
         return jsonify({"response": buttons_html})
 
-    # Genre-based request
     if user_message in GENRE_MAP:
         result = get_genre_recommendations(user_message)
         return jsonify({"response": result["text"], "movies": result["movies"]})
 
-    # Top movies request
+    if any(keyword in user_message for keyword in ["bollywood", "hindi movies", "top bollywood", "top hindi"]):
+        try:
+            bollywood_url = f"https://api.themoviedb.org/3/discover/movie?api_key={TMDB_API_KEY}&with_original_language=hi&sort_by=popularity.desc"
+            response = requests.get(bollywood_url).json()
+            movies = format_movie_list(response.get("results", []))
+            if movies:
+                text = "🎥 Here are some popular Bollywood movies:\n\n"
+                text += "\n".join([f"{m['title']} ({m['year']}) ⭐ {m['rating']}" for m in movies])
+                return jsonify({"response": text, "movies": movies})
+            else:
+                return jsonify({"response": "Couldn't find popular Bollywood movies.", "movies": []})
+        except Exception as e:
+            return jsonify({"response": f"Error fetching Bollywood movies: {str(e)}", "movies": []})
+
     if any(keyword in user_message for keyword in ["top 10 movies", "best top movies", "highest ranking movies"]):
         result = get_top_movies()
         return jsonify({"response": result["text"], "movies": result["movies"]})
 
-    # Movie-based recommendation
-    result = get_recommendations(user_message)
+    result = get_movies_by_movie_genre(user_message)
     if result["movies"]:
         return jsonify({"response": result["text"], "movies": result["movies"]})
     else:
-        return jsonify({"response": "Movie not found", "movies": []})
-    if __name__ == '__main__':
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=True)
+        result = get_recommendations(user_message)
+        return jsonify({"response": result["text"], "movies": result["movies"]})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
